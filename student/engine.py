@@ -469,6 +469,8 @@ class Engine:
                     if chunk and on_token:
                         on_token(chunk)
                     delivered = decoded
+                if len(generated) == 1 or len(generated) % 4 == 0:
+                    self._emit({'type': 'inference', 'tokens': len(generated), 'snapshot': self.snapshot()})
                 input_ids = torch.tensor([[next_id]], dtype=torch.long, device=self.device)
                 attention_mask = torch.cat((attention_mask, torch.ones((1, 1), dtype=torch.long,
                                                                      device=self.device)), dim=1)

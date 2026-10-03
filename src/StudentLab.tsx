@@ -572,8 +572,38 @@ export default function StudentLab() {
             <p className="hint">A curva aparecerá durante o treino.</p>
           )}
           {status?.metrics && (
-            <div className="training-result">
-              <pre>{JSON.stringify(status.metrics, null, 2)}</pre>
+            <div className="telemetry training-result">
+              <div>
+                <span>Erro antes da aula</span>
+                <b>{status.metrics.validationBefore?.toFixed(3)}</b>
+              </div>
+              <div>
+                <span>Erro após a aula</span>
+                <b
+                  className={
+                    status.metrics.validationImproved
+                      ? "mint-text"
+                      : "peach-text"
+                  }
+                >
+                  {status.metrics.validationAfter?.toFixed(3)}
+                </b>
+              </div>
+              <div>
+                <span>Treino / validação</span>
+                <b>
+                  {status.metrics.trainingExamples} /{" "}
+                  {status.metrics.validationExamples} exemplos
+                </b>
+              </div>
+              <div>
+                <span>Passos concluídos</span>
+                <b>{status.metrics.steps}</b>
+              </div>
+              <div>
+                <span>Tempo de treino</span>
+                <b>{status.metrics.elapsedSeconds?.toFixed(1)} s</b>
+              </div>
             </div>
           )}
           <p className="hint">
