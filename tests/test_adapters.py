@@ -36,7 +36,7 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             adapter.grow(2)
         with self.assertRaises(ValueError):
-            adapter.grow(65)
+            adapter.grow(257)
 
     def test_training_updates_real_adapter_weights_and_freezes_base(self):
         adapter = ResidualAdapterMLP(nn.Linear(12, 12), 12, 3)

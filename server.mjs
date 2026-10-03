@@ -133,6 +133,11 @@ export const server = http.createServer(async (req, res) => {
     }
     return;
   }
+  if (pathname === "/" || pathname === "/index.html") {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+    res.end(`<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Neurovis AI</title><style>body{background:#10131c;color:#f1f4ff;font:16px Segoe UI,Arial;display:grid;place-items:center;min-height:100vh;margin:0}.box{max-width:560px;padding:36px;border-radius:18px;background:#191e2b}h1{margin:0 0 8px}p{color:#a7b0c5;line-height:1.55}a{display:inline-block;padding:12px 18px;border-radius:9px;background:#5869d8;color:white;text-decoration:none}</style><main class="box"><h1>Neurovis AI</h1><p>A versão atual é um aplicativo Python para computador. Feche esta página e abra <b>Iniciar-Neurovis.cmd</b> na pasta do projeto.</p><p>O app inclui chat local, visão de imagens pelo Qwen, treino do aluno e um ambiente virtual interativo.</p><a href="https://github.com/CodeState01/neurovis-ai">Código-fonte aberto</a></main></html>`);
+    return;
+  }
   if (req.method === "GET" && pathname === "/api/status") {
     try {
       const r = await fetch(`${ollama}/api/tags`, {
@@ -309,7 +314,7 @@ if (
       ".venv",
       process.platform === "win32" ? "Scripts/python.exe" : "bin/python",
     );
-  if (existsSync(python)) {
+  if (existsSync(python) && process.env.DESKTOP_REDIRECT_ONLY !== "1") {
     const portProbe = net.createServer();
     await new Promise((resolve, reject) => {
       portProbe.once("error", reject);
@@ -344,7 +349,7 @@ if (
       studentProcess?.kill();
       server.close(() => process.exit(0));
     });
-  } else
+  } else if (process.env.DESKTOP_REDIRECT_ONLY !== "1")
     console.log(
       "Ambiente do aluno ausente. Execute scripts/setup-student.ps1.",
     );

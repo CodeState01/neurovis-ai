@@ -1,10 +1,10 @@
 @echo off
 cd /d "%~dp0"
-where node >nul 2>nul
+where py >nul 2>nul
 if errorlevel 1 (
-  echo Instale o Node.js em https://nodejs.org/ e abra este arquivo novamente.
+  echo Instale Python 3.12 em https://www.python.org/downloads/ e marque Add Python to PATH.
   pause
   exit /b 1
 )
-node scripts\setup.mjs
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\setup-python.ps1"
 pause

@@ -1,6 +1,8 @@
 """Local, bounded teacher/student orchestration. No generated code is executed."""
 from __future__ import annotations
 import copy
+import base64
+import io
 import json
 import os
 import sys
@@ -81,7 +83,7 @@ def validate_lesson(raw, current_width, max_steps, allow_growth):
     if not isinstance(raw, dict):
         raise ValueError('O professor não devolveu um plano válido.')
     width = raw.get('width', current_width)
-    if not isinstance(width, int) or isinstance(width, bool) or width not in (8,16,32,64):
+    if not isinstance(width, int) or isinstance(width, bool) or width not in (8,16,32,64,128,256):
         raise ValueError('O professor escolheu uma largura fora dos limites.')
     width = max(current_width, width) if allow_growth else current_width
     examples = raw.get('examples')
@@ -105,7 +107,7 @@ def validate_lesson(raw, current_width, max_steps, allow_growth):
 def teacher_plan(goal, current_width, max_steps, allow_growth):
     system = ('Você é o professor e arquiteto de um aluno TinyLlama 1.1B. '
         'Você pode criar neurônios adicionais REAIS em adaptadores residuais SiLU, um por camada (22 camadas). '
-        'Os 1.1B parâmetros originais ficam congelados. Você escolhe width (neurônios por adaptador) entre 8,16,32,64. '
+        'Os 1.1B parâmetros originais ficam congelados. Você escolhe width (neurônios por adaptador) entre 8,16,32,64,128,256. '
         'Aumentar width cria neurônios; os pesos anteriores são preservados. Não produza código ou comandos. '
         'Responda SOMENTE JSON válido com width, steps, learningRate, reason e examples. '
         'examples deve conter EXATAMENTE 12 objetos com question e answer em português. '
@@ -154,6 +156,31 @@ def run_lesson(goal, max_steps, allow_growth):
     finally:
         timer.cancel();update(busy=False,phase='idle');operation.release()
 
+def vision_description(question, image_data, mime):
+    """Ask the local vision-capable teacher about an image; never persist the image."""
+    if not isinstance(image_data, str) or len(image_data) > 8_000_000:
+        raise ValueError('A imagem excede o limite local de 6 MB.')
+    raw = base64.b64decode(image_data, validate=True)
+    from PIL import Image, ImageOps
+    with Image.open(io.BytesIO(raw)) as image:
+        if image.width > 4096 or image.height > 4096:
+            raise ValueError('A imagem deve ter no máximo 4096 × 4096 pixels.')
+        image = ImageOps.exif_transpose(image).convert('RGB')
+        image.thumbnail((1280, 1280))
+        buffer = io.BytesIO()
+        image.save(buffer, format='JPEG', quality=84, optimize=True)
+        encoded = base64.b64encode(buffer.getvalue()).decode('ascii')
+    prompt = ('Observe a imagem e responda em português à pergunta. Descreva apenas o que é visível; '
+              'se não for possível determinar algo, diga isso. Não revele raciocínio interno.\nPergunta: '
+              + question[:1200])
+    result = ollama('/api/chat', {'model': TEACHER, 'messages': [
+        {'role':'user','content':prompt,'images':[encoded]}], 'think':False, 'stream':False,
+        'keep_alive':'1m','options':{'num_ctx':4096,'num_predict':300}}, timeout=240)
+    answer = result.get('message', {}).get('content', '').strip()
+    if not answer:
+        raise ValueError('O Qwen não conseguiu interpretar essa imagem. Tente outra imagem.')
+    return answer[:3000]
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args): pass
     def auth(self):
@@ -171,11 +198,34 @@ class Handler(BaseHTTPRequestHandler):
         if not self.auth():return
         try:
             length=int(self.headers.get('Content-Length','0'))
-            if not 1<=length<=100000:raise ValueError('Tamanho de pedido inválido.')
+            if not 1<=length<=8_500_000:raise ValueError('Tamanho de pedido inválido.')
             data=json.loads(self.rfile.read(length))
             if not isinstance(data,dict):raise ValueError('Pedido inválido.')
             if self.path=='/stop':
                 stop.set();self.send_json(200,{'stopping':True});return
+            if self.path=='/vision':
+                question=data.get('question','')
+                if not isinstance(question,str) or not 1<=len(question)<=1200:raise ValueError('Escreva uma pergunta curta sobre a imagem.')
+                if not operation.acquire(blocking=False):self.send_json(409,{'error':'O professor/aluno está ocupado. Aguarde.'});return
+                try:
+                    update(busy=True,phase='vision',error=None);e=get_engine();e.unload();log('Qwen local está observando a imagem.')
+                    description=vision_description(question,data.get('image'),data.get('mime','image/jpeg'))
+                    unload_teacher();update(vision={'question':question,'description':description})
+                    self.send_json(200,{'description':description,'model':TEACHER,'local':True})
+                finally:update(busy=False,phase='idle');operation.release()
+                return
+            if self.path=='/environment':
+                task=data.get('task','')
+                if not isinstance(task,str) or not 3<=len(task)<=600:raise ValueError('Descreva o que o robô deve fazer em 3 a 600 caracteres.')
+                size=data.get('size',10)
+                if not isinstance(size,int) or isinstance(size,bool) or not 7<=size<=14:raise ValueError('Escolha um mundo de 7 a 14 casas por lado.')
+                if not operation.acquire(blocking=False):self.send_json(409,{'error':'O professor/aluno está ocupado. Aguarde.'});return
+                try:
+                    update(busy=True,phase='environment',error=None);get_engine().unload();log('Qwen está planejando ações para o ambiente virtual local.')
+                    from virtual_env import plan_for
+                    result=plan_for(task,size);unload_teacher();update(virtualWorld=result);self.send_json(200,result)
+                finally:update(busy=False,phase='idle');operation.release()
+                return
             if self.path=='/teach':
                 goal=data.get('goal','')
                 if not isinstance(goal,str) or not 3<=len(goal)<=1200:raise ValueError('Descreva o que ensinar em 3 a 1.200 caracteres.')

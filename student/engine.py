@@ -21,7 +21,7 @@ from torch.nn import functional as F
 
 
 MODEL_ID = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-MAX_WIDTH = 64
+MAX_WIDTH = 256
 MAX_SEQUENCE = 256
 
 
